@@ -10,9 +10,11 @@ SRC_URI_append_h3ulcb-4x2g-kf-xt = " \
     file://daemon.conf \
     file://pulseaudio-bluetooth.conf \
     file://pulseaudio-ofono.conf \
+    file://pulseaudio.service \
+    file://pulseaudio.socket \
 "
 
-inherit update-rc.d
+inherit update-rc.d systemd
 
 INITSCRIPT_PACKAGES = "${PN}-server"
 INITSCRIPT_NAME_${PN}-server = "pulseaudio"
@@ -36,15 +38,33 @@ do_install_append_h3ulcb-4x2g-kf-xt() {
     install -m 644 ${WORKDIR}/pulseaudio-ofono.conf ${D}/${sysconfdir}/dbus-1/system.d/
 }
 
+FILES_${PN} = " \
+    ${systemd_system_unitdir} \
+"
+
 FILES_${PN}-server += " \
     ${datadir}/alsa/ucm \
     ${datadir}/dbus-1/ \
 "
 
-do_install_append () {
-    sed -i "/ConditionUser=!root/d" \
-    ${D}/${systemd_user_unitdir}/pulseaudio.service
+SYSTEMD_PACKAGES = "${PN}"
+SYSTEMD_SERVICE_${PN} = " pulseaudio.service pulseaudio.socket"
 
-    sed -i "/ConditionUser=!root/d" \
-    ${D}/${systemd_user_unitdir}/pulseaudio.socket
+set_cfg_value () {
+	sed -i -e "s~\(; *\)\?$2 =.*~$2 = $3~" "$1"
+	if ! grep -q "^$2 = $3\$" "$1"; then
+		die "Use of sed to set '$2' to '$3' in '$1' failed"
+	fi
+}
+
+do_install_append () {
+    rm -rf ${D}/usr/lib/systemd
+    rm ${D}/${sysconfdir}/pulse/default.pa
+
+    install -d ${D}${systemd_system_unitdir}
+    install -m 0644 ${WORKDIR}/pulseaudio.service ${D}${systemd_system_unitdir} 
+    install -m 0644 ${WORKDIR}/pulseaudio.socket ${D}${systemd_system_unitdir} 
+
+    set_cfg_value ${D}/${sysconfdir}/pulse/client.conf autospawn no
+    set_cfg_value ${D}/${sysconfdir}/pulse/client.conf default-server /var/run/pulse/native
 }
